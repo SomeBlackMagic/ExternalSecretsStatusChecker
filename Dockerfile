@@ -6,7 +6,10 @@ ARG BINARY
 ARG TARGETOS
 ARG TARGETARCH
 
-RUN ls -lah dist/
+
+COPY dist/ /root/
+
+RUN ls -lah
 
 #COPY dist/${TARGETOS}-${TARGETARCH}/${BINARY} /root/${BINARY}
 #
