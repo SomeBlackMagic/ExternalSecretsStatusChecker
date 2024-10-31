@@ -33,7 +33,7 @@ jobs:
           do
             OS=$(echo $platform | cut -d'/' -f1)
             ARCH=$(echo $platform | cut -d'/' -f2)
-            OUTPUT_NAME="externalsecret-watcher-${OS}-${ARCH}"
+            OUTPUT_NAME="external-secret-watcher-${OS}-${ARCH}"
             if [ "$OS" = "windows" ]; then
               OUTPUT_NAME="${OUTPUT_NAME}.exe"
             fi
@@ -44,7 +44,7 @@ jobs:
       - name: Upload Release Assets
         uses: softprops/action-gh-release@v1
         with:
-          files: dist/externalsecret-watcher-*
+          files: dist/external-secret-watcher-*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -80,7 +80,7 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
-            BINARY=externalsecret-watcher
+            BINARY=external-secret-watcher
             BUILDTIME=${{ fromJSON(steps.meta.outputs.json).labels['org.opencontainers.image.created'] }}
             VERSION=${{ fromJSON(steps.meta.outputs.json).labels['org.opencontainers.image.version'] }}
             REVISION=${{ fromJSON(steps.meta.outputs.json).labels['org.opencontainers.image.revision'] }}

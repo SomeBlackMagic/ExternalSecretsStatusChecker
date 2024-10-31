@@ -1,4 +1,4 @@
-module awesomeProject
+module external-secret-watcher
 
 go 1.23.1
 

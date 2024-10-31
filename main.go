@@ -28,7 +28,7 @@ func main() {
 	flag.Parse()
 
 	if *namespace == "" || *name == "" {
-		fmt.Println("Usage: ./program -namespace=<namespace> -name=<name>")
+		fmt.Println("Usage: ./external-secret-watcher -namespace=<namespace> -name=<name>")
 		os.Exit(1)
 	}
 
@@ -71,8 +71,13 @@ func main() {
 	// Start watching events in a separate goroutine
 	go watchEvents(clientset, *namespace, *name)
 
-	// Check the status of the ExternalSecret
-	checkStatus(dynamicClient, *namespace, *name)
+	// Check the status of the ExternalSecret with timeout
+	timeout := 10 * time.Minute
+	err = checkStatusWithTimeout(dynamicClient, *namespace, *name, timeout)
+	if err != nil {
+		fmt.Printf("Error: %v\n", err)
+		os.Exit(1)
+	}
 }
 
 func watchEvents(clientset *kubernetes.Clientset, namespace, name string) {
@@ -102,7 +107,7 @@ func watchEvents(clientset *kubernetes.Clientset, namespace, name string) {
 	}
 }
 
-func checkStatus(dynamicClient dynamic.Interface, namespace, name string) {
+func checkStatusWithTimeout(dynamicClient dynamic.Interface, namespace, name string, timeout time.Duration) error {
 	// Define the GroupVersionResource for ExternalSecret
 	externalSecretGVR := schema.GroupVersionResource{
 		Group:    "external-secrets.io",
@@ -110,20 +115,31 @@ func checkStatus(dynamicClient dynamic.Interface, namespace, name string) {
 		Resource: "externalsecrets",
 	}
 
+	// Create a context with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
+
 	for {
-		// Get the ExternalSecret resource
-		unstructuredES, err := dynamicClient.Resource(externalSecretGVR).Namespace(namespace).Get(context.TODO(), name, metav1.GetOptions{})
-		if err != nil {
-			fmt.Printf("Error getting ExternalSecret: %v\n", err)
-		} else {
-			if isReady(unstructuredES) {
-				fmt.Printf("ExternalSecret %s has reached Ready state.\n", name)
-				os.Exit(0)
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("timeout reached: ExternalSecret %s did not become Ready within %v", name, timeout)
+		case <-ticker.C:
+			// Get the ExternalSecret resource
+			unstructuredES, err := dynamicClient.Resource(externalSecretGVR).Namespace(namespace).Get(context.TODO(), name, metav1.GetOptions{})
+			if err != nil {
+				fmt.Printf("Error getting ExternalSecret: %v\n", err)
 			} else {
-				fmt.Printf("Waiting... Current status conditions: %v\n", getConditions(unstructuredES))
+				if isReady(unstructuredES) {
+					fmt.Printf("ExternalSecret %s has reached Ready state.\n", name)
+					return nil
+				} else {
+					fmt.Printf("Waiting... Current status conditions: %v\n", getConditions(unstructuredES))
+				}
 			}
 		}
-		time.Sleep(5 * time.Second)
 	}
 }
 
