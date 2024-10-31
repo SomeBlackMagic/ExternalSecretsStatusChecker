@@ -6,13 +6,8 @@ ARG BINARY
 ARG TARGETOS
 ARG TARGETARCH
 
+COPY dist/${BINARY}-${TARGETOS}-${TARGETARCH}/ /root/${BINARY}
 
-COPY dist/ /root/
+RUN chmod +x /root/${BINARY}
 
-RUN ls -lah
-
-#COPY dist/${TARGETOS}-${TARGETARCH}/${BINARY} /root/${BINARY}
-#
-#RUN chmod +x /root/${BINARY}
-#
-#CMD ["./externalsecret-watcher"]
+CMD ["./externalsecret-watcher"]
