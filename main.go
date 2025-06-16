@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"path/filepath"
 	"time"
@@ -21,6 +22,48 @@ import (
 	"k8s.io/client-go/util/homedir"
 )
 
+func getKubeConfig() (*rest.Config, error) {
+	kubeconfigEnv := os.Getenv("KUBECONFIG")
+	var kubeconfig string
+
+	if kubeconfigEnv != "" {
+		kubeconfig = kubeconfigEnv
+	} else if home := homedir.HomeDir(); home != "" {
+		kubeconfig = filepath.Join(home, ".kube", "config")
+	}
+
+	// Use kubeconfig from file if it exists
+	if kubeconfig != "" {
+		if _, err := os.Stat(kubeconfig); err == nil {
+			return clientcmd.BuildConfigFromFlags("", kubeconfig)
+		}
+	}
+
+	// Check if serviceaccount files exist
+	tokenPath := "/var/run/secrets/kubernetes.io/serviceaccount/token"
+	caPath := "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+	if _, err := os.Stat(tokenPath); err == nil {
+		host := os.Getenv("KUBERNETES_SERVICE_HOST")
+		port := os.Getenv("KUBERNETES_SERVICE_PORT")
+		if host != "" && port != "" {
+			token, err := ioutil.ReadFile(tokenPath)
+			if err != nil {
+				return nil, fmt.Errorf("failed to read token: %w", err)
+			}
+			return &rest.Config{
+				Host:        "https://" + host + ":" + port,
+				BearerToken: string(token),
+				TLSClientConfig: rest.TLSClientConfig{
+					CAFile: caPath,
+				},
+			}, nil
+		}
+	}
+
+	// Fallback to in-cluster config (uses same paths)
+	return rest.InClusterConfig()
+}
+
 func main() {
 	// Retrieve the namespace and resource name from command-line arguments
 	namespace := flag.String("namespace", "", "Namespace of the ExternalSecret")
@@ -32,23 +75,10 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Read KUBECONFIG from environment variables or from the home directory
-	kubeconfigEnv := os.Getenv("KUBECONFIG")
-	var kubeconfig string
-	if kubeconfigEnv != "" {
-		kubeconfig = kubeconfigEnv
-	} else if home := homedir.HomeDir(); home != "" {
-		kubeconfig = filepath.Join(home, ".kube", "config")
-	}
-
 	var config *rest.Config
 	var err error
 
-	if kubeconfig != "" {
-		config, err = clientcmd.BuildConfigFromFlags("", kubeconfig)
-	} else {
-		config, err = rest.InClusterConfig()
-	}
+	config, err = getKubeConfig()
 
 	if err != nil {
 		fmt.Printf("Error building kubeconfig: %v\n", err)
